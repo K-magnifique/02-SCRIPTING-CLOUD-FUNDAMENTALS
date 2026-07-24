@@ -1,0 +1,21 @@
+# AWS credentials and local CLI state -- never commit these
+.aws/
+*.pem
+*.ppk
+credentials
+credentials.csv
+*_accessKeys.csv
+
+# Local env files -- config templates use ${VAR} placeholders, not real values
+.env
+.env.*
+
+# Editor/OS noise
+.DS_Store
+Thumbs.db
+*.swp
+
+# Terraform, if you end up reaching for it beyond the required Bash script
+.terraform/
+*.tfstate
+*.tfstate.backup
