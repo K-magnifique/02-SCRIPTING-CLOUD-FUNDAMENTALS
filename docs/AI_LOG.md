@@ -44,3 +44,29 @@ Add one entry per session you use an AI tool, even briefly.
   not something the AI got wrong. Have not yet accepted the IAM policy or app
   config as final — both remain practice-only pending the real
   `PERSONA_BRIEF.md`, deliberately not submitted as-is.
+
+- **Date:** 2026-08-26 to 2026-09-02 (multi-session)
+- **Tool:** Claude Code (Sonnet 5), VS Code extension
+- **Prompt(s) used:** Walked through `cleanup.sh` function-by-function with the
+  AI explaining the reasoning first, typing each function into the file myself
+  rather than having it write the file; asked for a defense-walkthrough
+  rehearsal script with runnable commands; after confirming `PERSONA_BRIEF.md`
+  and a remote repo link still hadn't arrived after over a week, asked the AI
+  to help finalize the decision to self-author the persona brief as the real
+  submission input instead of continuing to wait.
+- **What was accepted:** The explanations of each `cleanup.sh` function (why
+  teardown order is the reverse of creation order, why `verify_clean` checks
+  each resource independently rather than trusting the delete calls); the
+  `.gitignore` bug fix it caught (`.env.*` was also swallowing the committed
+  `.env.example` template); promoting the already-practiced persona to
+  `PERSONA_BRIEF.md` as final, with the reasoning documented in
+  `ASSUMPTIONS_LOG.md` rather than silently treated as equivalent to a real
+  brief.
+- **What was rejected or changed, and why:** Rejected having the AI write
+  `cleanup.sh` directly — typed each function in myself instead, and caught
+  (with the AI's help re-reading the file) that I'd accidentally duplicated
+  `delete_security_group` and skipped `empty_and_delete_bucket` on a first
+  pass; fixed by re-typing rather than accepting a generated replacement.
+  Rejected an early Bash tool call proposing to run `mkdir`/AWS profile checks
+  automatically — chose to run AWS-touching commands myself throughout, so
+  nothing credential-related ever needed to pass through the assistant.
