@@ -8,6 +8,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/common.sh
 source "${SCRIPT_DIR}/lib/common.sh"
 
+# Returns the AMI to launch: an explicit AMI_ID override if set, otherwise the
+# latest Amazon Linux 2023 AMI resolved dynamically via SSM's public parameter
+# store — avoids hardcoding a region-specific ID that would go stale.
 resolve_ami() {
   if [ -n "${AMI_ID:-}" ]; then
     printf '%s' "$AMI_ID"
@@ -18,6 +21,8 @@ resolve_ami() {
     --query 'Parameters[0].Value' --output text
 }
 
+# Every new AWS account gets one default VPC per region; this script assumes
+# it still exists rather than creating a VPC of its own.
 ensure_default_vpc() {
   local vpc_id
   vpc_id="$(aws_cli ec2 describe-vpcs --filters Name=isDefault,Values=true \
@@ -27,6 +32,9 @@ ensure_default_vpc() {
   printf '%s' "$vpc_id"
 }
 
+# Idempotency pattern used throughout: describe first, only create if not found.
+# Security group names are unique per-VPC, so the existence check filters on
+# both name and vpc-id.
 ensure_security_group() {
   local name="$1" vpc_id="$2" sg_id
   sg_id="$(aws_cli ec2 describe-security-groups \
@@ -37,10 +45,11 @@ ensure_security_group() {
     log "Creating security group ${name}"
     sg_id="$(aws_cli ec2 create-security-group \
       --group-name "$name" \
-      --description "Kente Retail lab — ${STUDENT_ID}" \
+      --description "Kente Retail lab - ${STUDENT_ID}" \
       --vpc-id "$vpc_id" \
       --tag-specifications "$(tag_spec security-group "$name")" \
       --query 'GroupId' --output text)"
+    [ -n "$sg_id" ] && [ "$sg_id" != "None" ] || die "failed to create security group ${name}"
   else
     log "Security group ${name} already exists (${sg_id})"
   fi
@@ -53,7 +62,8 @@ ensure_security_group() {
     if [ -z "$existing" ]; then
       log "Authorizing SSH from ${ALLOWED_SSH_CIDR} on ${name}"
       aws_cli ec2 authorize-security-group-ingress \
-        --group-id "$sg_id" --protocol tcp --port 22 --cidr "$ALLOWED_SSH_CIDR" >/dev/null
+        --group-id "$sg_id" --protocol tcp --port 22 --cidr "$ALLOWED_SSH_CIDR" >/dev/null \
+        || die "failed to authorize SSH ingress on ${name}"
     else
       log "SSH ingress from ${ALLOWED_SSH_CIDR} already present on ${name}"
     fi
@@ -64,6 +74,9 @@ ensure_security_group() {
   printf '%s' "$sg_id"
 }
 
+# Same describe-then-create idempotency pattern, keyed on the instance's
+# Name tag. --client-token adds a second, API-level layer of idempotency in
+# case this exact call is ever retried (e.g. a network blip).
 ensure_ec2_instance() {
   local name="$1" sg_id="$2" instance_id ami_id
   instance_id="$(aws_cli ec2 describe-instances \
@@ -81,34 +94,46 @@ ensure_ec2_instance() {
   [ -n "$ami_id" ] && [ "$ami_id" != "None" ] || die "could not resolve an AMI ID"
 
   log "Launching EC2 instance ${name} (${INSTANCE_TYPE}, ${ami_id})"
+  # Two tag-specifications: the instance and its EBS volume are separate
+  # taggable resources in AWS, so both need tagging explicitly.
   instance_id="$(aws_cli ec2 run-instances \
     --image-id "$ami_id" \
     --instance-type "$INSTANCE_TYPE" \
     --security-group-ids "$sg_id" \
     --count 1 \
-    --client-token "${name}-run" \
+    --client-token "${name}-$(date +%s)" \
     --tag-specifications "$(tag_spec instance "$name")" "$(tag_spec volume "$name")" \
     --query 'Instances[0].InstanceId' --output text)"
+  [ -n "$instance_id" ] && [ "$instance_id" != "None" ] || die "failed to launch EC2 instance ${name}"
 
   printf '%s' "$instance_id"
 }
 
+# S3 idempotency check uses head-bucket's exit code rather than parsing text
+# output, since head-bucket returns no data — just success/failure.
 ensure_s3_bucket() {
   local name="$1"
   if aws_cli s3api head-bucket --bucket "$name" 2>/dev/null; then
     log "S3 bucket ${name} already exists"
   else
     log "Creating S3 bucket ${name}"
+    # us-east-1 is the one region where create-bucket rejects a
+    # LocationConstraint; every other region requires one.
     if [ "$AWS_REGION" = "us-east-1" ]; then
-      aws_cli s3api create-bucket --bucket "$name" >/dev/null
+      aws_cli s3api create-bucket --bucket "$name" >/dev/null \
+        || die "failed to create S3 bucket ${name}"
     else
       aws_cli s3api create-bucket --bucket "$name" \
-        --create-bucket-configuration "LocationConstraint=${AWS_REGION}" >/dev/null
+        --create-bucket-configuration "LocationConstraint=${AWS_REGION}" >/dev/null \
+        || die "failed to create S3 bucket ${name}"
     fi
   fi
 
+  # Runs unconditionally (new or pre-existing) since create-bucket has no
+  # --tag-specifications option — bucket tagging is always a separate call.
   aws_cli s3api put-bucket-tagging --bucket "$name" --tagging \
-    "TagSet=[{Key=Name,Value=${name}},{Key=cost-center,Value=${COST_CENTER}},{Key=environment,Value=${ENVIRONMENT_TAG}},{Key=owner,Value=${OWNER_TAG}}]"
+    "TagSet=[{Key=Name,Value=${name}},{Key=cost-center,Value=${COST_CENTER}},{Key=environment,Value=${ENVIRONMENT_TAG}},{Key=owner,Value=${OWNER_TAG}}]" \
+    || die "failed to tag S3 bucket ${name}"
 }
 
 main() {
@@ -121,6 +146,8 @@ main() {
   instance_name="$(resource_name app-server)"
   bucket_name="$(resource_name app-config)"
 
+  # Dependency order: VPC before security group, security group before the
+  # instance that references it. The bucket has no dependency on the others.
   vpc_id="$(ensure_default_vpc)"
   sg_id="$(ensure_security_group "$sg_name" "$vpc_id")"
   instance_id="$(ensure_ec2_instance "$instance_name" "$sg_id")"

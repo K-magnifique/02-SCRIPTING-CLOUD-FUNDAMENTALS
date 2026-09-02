@@ -20,3 +20,6 @@ Thumbs.db
 .terraform/
 *.tfstate
 *.tfstate.backup
+
+# Scheduled status-report.sh output
+logs/

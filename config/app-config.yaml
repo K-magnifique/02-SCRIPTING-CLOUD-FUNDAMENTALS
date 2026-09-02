@@ -1,0 +1,16 @@
+app_name: kente-inventory-api
+environment: dev
+port: 8080
+log_level: info
+
+database:
+  host: ${DB_HOST}
+  port: 5432
+  name: kente_inventory_dev
+
+feature_flags:
+  enable_new_checkout: false
+
+aws:
+  region: eu-west-1
+  s3_config_bucket: magnifique-kente-app-config
