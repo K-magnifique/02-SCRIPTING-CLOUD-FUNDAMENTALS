@@ -9,6 +9,7 @@ credentials.csv
 # Local env files -- config templates use ${VAR} placeholders, not real values
 .env
 .env.*
+!.env.example
 
 # Editor/OS noise
 .DS_Store
