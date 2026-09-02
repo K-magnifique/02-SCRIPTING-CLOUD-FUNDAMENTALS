@@ -5,15 +5,65 @@ walkthrough — the instructor can tell the difference.
 
 ## Developer persona — access needs beyond what the brief states outright
 
-<!-- For each additional permission you considered granting (or deliberately did
-     NOT grant), record what it was and why. -->
+- **`PERSONA_BRIEF.md` was never delivered.** As of 2026-08-25, no persona brief or
+  requirements list has appeared in `starter-repo/` (checked repeatedly across the
+  build). Rather than block entirely, I built a fictional stand-in persona
+  ("Junior Backend Developer" / jbdev — see `PRACTICE_PERSONA_BRIEF.md` at the
+  project root, outside this repo so it can't be mistaken for the real submission)
+  and used it to practice the actual method: map each stated need to a specific
+  AWS action + resource, write the policy, then verify with
+  `iam:SimulatePrincipalPolicy` that everything *not* stated is denied.
+- Practiced granting: launch/stop/terminate own tagged EC2 instances,
+  read/write in exactly one named S3 bucket, read-only security-group
+  visibility, and log/status read access for debugging — each with a `Sid`
+  naming its justification. Deliberately withheld: IAM management, any other
+  bucket, any other region, production resources — proven denied via
+  simulation rather than just assumed.
+- When the real brief arrives, this same method gets re-run against real
+  requirements; the practice IAM objects get deleted rather than relabeled as
+  final (see `PRACTICE_IAM_GUIDE.md` step 6).
 
 ## Clarifying questions you'd ask the CTO in a real engagement
 
-<!-- Things you guessed at instead of asking, and what you'd confirm first if this
-     were a real client engagement. -->
+- Which exact tag key does the AWS Budget alarm actually filter on? The sandbox
+  doc says it's "configured on your cost-allocation tag" without naming the key —
+  I assumed `cost-center`, but in a real engagement I'd confirm this before
+  trusting the tripwire to catch anything.
+- Does this persona need any remote-access method (SSH, SSM Session Manager) at
+  all? Nothing in scope yet says so, so the provisioning script currently leaves
+  the security group closed to all inbound traffic by default.
+- What is my actual assigned student/resource-naming prefix and region? The
+  sandbox doc says these come bundled with bootstrap credential issuance; I
+  received the credentials (resolving to `assumed-role/DCEPrincipal-dce/...` in
+  account `061051226504`, region confirmed as `eu-west-1` since that's what
+  `get-caller-identity` succeeded against) but no explicit prefix was stated
+  alongside them, so `STUDENT_ID` in `.env.example` is a placeholder
+  (`changeme`) pending confirmation or trial-and-error against `AccessDenied`
+  errors, per the sandbox doc's own guidance.
+- Is there a remote git repository I'm meant to push `starter-repo` to, or am I
+  expected to create my own and share the link at submission time? Neither the
+  README nor the lab platform surfaced one as of 2026-08-25.
 
 ## Other requirement gaps you filled in yourself
 
-<!-- Anything the brief left ambiguous or unspecified that you had to decide on your
-     own (e.g. instance size, region, naming convention, tag values). -->
+- **Config delivery mechanism**: introduced `.env` (git-ignored, `.env.example`
+  committed) to hold `STUDENT_ID`, region, profile, instance size, and tag
+  values, since the real values weren't available yet and hardcoding them would
+  have blocked writing the provisioning script at all.
+- **Naming convention**: `${STUDENT_ID}-kente-<purpose>` for every resource
+  (security group, EC2 instance, S3 bucket), to satisfy the sandbox's
+  "resource names/tags must start with your student identifier" scoping rule
+  once the real identifier is known.
+- **Instance sizing**: restricted `INSTANCE_TYPE` to a small allow-list
+  (`t2/t3.micro|small`, default `t3.micro`) enforced by input validation in
+  `scripts/lib/common.sh`, so a typo can't accidentally launch something
+  expensive against the $20 budget.
+- **AMI selection**: resolved dynamically via the public SSM parameter for the
+  latest Amazon Linux 2023 AMI rather than hardcoding a region-specific AMI ID,
+  so the script isn't silently wrong if the region changes.
+- **Security-group default posture**: no inbound rules unless `ALLOWED_SSH_CIDR`
+  is explicitly set in `.env` — chose secure-by-default over guessing at a
+  remote-access requirement that isn't in scope yet.
+- **Tag values**: `environment=sandbox`, `cost-center=kente-retail-lab`,
+  `owner=${STUDENT_ID}` — reasonable defaults pending the clarifying question
+  above about the Budget alarm's actual filter key.
