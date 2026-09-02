@@ -7,9 +7,7 @@
       "Action": [
         "ec2:RunInstances",
         "ec2:StopInstances",
-        "ec2:TerminateInstances",
-        "ec2:DescribeInstances",
-        "ec2:DescribeInstanceStatus"
+        "ec2:TerminateInstances"
       ],
       "Resource": "*",
       "Condition": {
@@ -17,9 +15,15 @@
       }
     },
     {
+      "Sid": "DescribeOwnInstancesReadOnly",
+      "Effect": "Allow",
+      "Action": ["ec2:DescribeInstances", "ec2:DescribeInstanceStatus"],
+      "Resource": "*"
+    },
+    {
       "Sid": "ReadWriteOwnConfigBucketOnly",
       "Effect": "Allow",
-      "Action": ["s3:GetObject", "s3:PutObject", "s3:ListBucket"],
+      "Action": ["s3:GetObject", "s3:PutObject", "s3:ListBucket", "s3:GetBucketTagging"],
       "Resource": [
         "arn:aws:s3:::magnifique-kente-app-config",
         "arn:aws:s3:::magnifique-kente-app-config/*"

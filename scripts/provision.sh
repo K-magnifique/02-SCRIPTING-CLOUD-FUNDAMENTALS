@@ -101,7 +101,7 @@ ensure_ec2_instance() {
     --instance-type "$INSTANCE_TYPE" \
     --security-group-ids "$sg_id" \
     --count 1 \
-    --client-token "${name}-run" \
+    --client-token "${name}-$(date +%s)" \
     --tag-specifications "$(tag_spec instance "$name")" "$(tag_spec volume "$name")" \
     --query 'Instances[0].InstanceId' --output text)"
   [ -n "$instance_id" ] && [ "$instance_id" != "None" ] || die "failed to launch EC2 instance ${name}"
